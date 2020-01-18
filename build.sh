@@ -21,6 +21,8 @@ echo "Restoring dotnet tools..."
 dotnet tool restore
 echo "Restoring dotnet project references..."
 dotnet restore
+echo "Prebuilding..."
+dotnet build
 
 
 PAKET_TOOL_PATH=$(realpath .paket)
