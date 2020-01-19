@@ -89,12 +89,15 @@ Target.create "Test" <| fun _ ->
             "Fuchu.Tests"
             "Fuchu.CSharpTests"
         ]
-        |> Seq.map (fun t -> t @@ "bin" @@ "Release" @@ "net452" @@ (t + ".exe"))
-        |> Seq.map (fun p -> if not Environment.isMono then p,null else "mono",p)
-        |> Seq.map (fun (p,a) -> Process.asyncShellExec { ExecParams.Empty with Program = p; CommandLine = a })
-        |> Async.Parallel
-        |> Async.RunSynchronously
-        |> Array.sum
+        |> Seq.map (fun t -> 
+            let r=
+                RawCommand( t @@ "bin" @@ "Release" @@ "net452" @@ (t + ".exe"), Arguments.Empty)
+                |> CreateProcess.fromCommand 
+                |> CreateProcess.withToolType ( ToolType.Create() )
+                |> Proc.run
+            r.ExitCode
+        )
+        |> Seq.sum
     if errorCode <> 0 then failwith "Error in tests"
 
 "BuildSolution" <== ["AssemblyInfo"]
