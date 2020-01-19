@@ -57,6 +57,8 @@ let packages =
     ]
 
 Target.create "BuildSolution" (fun _ ->
+    MSBuild.runRelease id null "Restore" ["./Fuchu.sln"] |> ignore
+
     MSBuild.runRelease id null "Rebuild" ["./Fuchu.sln"] |> ignore
 )
 
