@@ -19,9 +19,6 @@ realpath() {
 
 echo "Restoring dotnet tools..."
 dotnet tool restore
-echo "Restoring dotnet project references..."
-dotnet restore
-
 
 PAKET_TOOL_PATH=$(realpath .paket)
 PAKET="$PAKET_TOOL_PATH"/paket
