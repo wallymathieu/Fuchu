@@ -486,6 +486,7 @@ module Tests =
     /// Runs tests in this assembly with supplied command-line options. Returns 0 if all tests passed, otherwise 1
     [<CompiledNameAttribute("DefaultMainThisAssembly")>]
     let defaultMainThisAssembly args =
+        Console.WriteLine("DefaultMainThisAssembly")
         let tests =
             match testFromAssembly (Assembly.GetEntryAssembly()) with
             | Some t -> t
@@ -497,6 +498,7 @@ module Tests =
     /// Returns 0 if all tests passed, otherwise 1
     [<CompiledNameAttribute("DefaultMainThisAssembly")>]
     let defaultMainThisAssemblyFilter args filter =
+        Console.WriteLine("DefaultMainThisAssembly2")
         let tests =
             match testFromAssembly (Assembly.GetEntryAssembly()) with
             | Some t -> filter t

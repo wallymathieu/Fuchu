@@ -89,15 +89,15 @@ Target.create "Test" <| fun _ ->
             "Fuchu.Tests"
             "Fuchu.CSharpTests"
         ]
-        |> Seq.map (fun t -> 
+        |> List.sumBy (fun t -> 
             let r=
                 RawCommand( t @@ "bin" @@ "Release" @@ "net452" @@ (t + ".exe"), Arguments.Empty)
                 |> CreateProcess.fromCommand 
                 |> CreateProcess.withToolType ( ToolType.Create() )
+                |> CreateProcess.withTimeout (TimeSpan.FromSeconds 10.)
                 |> Proc.run
             r.ExitCode
         )
-        |> Seq.sum
     if errorCode <> 0 then failwith "Error in tests"
 
 "BuildSolution" <== ["AssemblyInfo"]
