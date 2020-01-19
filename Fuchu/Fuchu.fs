@@ -4,6 +4,7 @@ open System
 open System.Linq
 open System.Runtime.CompilerServices
 open System.Reflection
+open System.Threading.Tasks
 
 /// Actual test function
 type TestCode = unit -> unit
@@ -36,7 +37,7 @@ module Helpers =
     /// Print to Console and Trace
     let tprintf fmt = 
         Printf.kprintf (fun s -> 
-                            //System.Diagnostics.Trace.Write s
+                            System.Diagnostics.Trace.Write s
                             Console.Write s) fmt
 
     open System.Text.RegularExpressions
@@ -112,15 +113,18 @@ module Test =
         >> TestList
 
     /// Applies a timeout to a test
-    let timeout timeout (test: TestCode) : TestCode =
+    let timeout (timeout:int) (test: TestCode) : TestCode =
         let testFunc = Func<_,_> test
-        let asyncTestFunc = Async.FromBeginEnd((fun (b,c) -> testFunc.BeginInvoke((),b,c)), testFunc.EndInvoke)
+        
         fun () -> 
             try
-                Async.RunSynchronously(asyncTestFunc, timeout = timeout)
+                let asyncTestFunc = Task.Run(fun () -> testFunc.Invoke())
+                if asyncTestFunc.Wait(timeout) |> not then
+                    let ts = TimeSpan.FromMilliseconds (float timeout)
+                    raise <| AssertException(sprintf "Timeout (%A)" ts)
             with :? TimeoutException ->
                 let ts = TimeSpan.FromMilliseconds (float timeout)
-                raise <| AssertException(sprintf "Timeout (%A)" ts)
+                raise <| AssertException(sprintf "Timeout2 (%A)" ts)
 
 
 module Impl =
@@ -486,7 +490,6 @@ module Tests =
     /// Runs tests in this assembly with supplied command-line options. Returns 0 if all tests passed, otherwise 1
     [<CompiledNameAttribute("DefaultMainThisAssembly")>]
     let defaultMainThisAssembly args =
-        Console.WriteLine("DefaultMainThisAssembly")
         let tests =
             match testFromAssembly (Assembly.GetEntryAssembly()) with
             | Some t -> t
@@ -498,7 +501,6 @@ module Tests =
     /// Returns 0 if all tests passed, otherwise 1
     [<CompiledNameAttribute("DefaultMainThisAssembly")>]
     let defaultMainThisAssemblyFilter args filter =
-        Console.WriteLine("DefaultMainThisAssembly2")
         let tests =
             match testFromAssembly (Assembly.GetEntryAssembly()) with
             | Some t -> filter t
