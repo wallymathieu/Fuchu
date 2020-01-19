@@ -43,7 +43,7 @@ let packages =
         { Package.Name = "Fuchu.MbUnit"
           Author = "Mauricio Scheffer"
           Description = "Converts Fuchu tests to MbUnit tests"
-          Sign = true}
+          Sign = false}
 
         { Package.Name = "Fuchu.FsCheck"
           Author = "Mauricio Scheffer"
