@@ -258,7 +258,29 @@ module Impl =
             if l |> List.exists (fun x -> x.IsAssignableFrom et)
                 then Some()
                 else None
-
+        let handleException (printers: TestPrinters) (name: string) (w:System.Diagnostics.Stopwatch) e=
+            match e with
+            | ExceptionInList failExceptionTypes.Value ->
+                let msg =
+                    let firstLine = 
+                        (stackTraceToString e.StackTrace).Split('\n') 
+                        |> Seq.filter (fun q -> q.Contains ",1): ") 
+                        |> Enumerable.FirstOrDefault
+                    sprintf "\n%s\n%s\n" e.Message firstLine
+                printers.Failed name msg w.Elapsed
+                { Name = name
+                  Result = Failed msg
+                  Time = w.Elapsed }
+            | ExceptionInList ignoreExceptionTypes.Value ->
+                printers.Ignored name e.Message
+                { Name = name
+                  Result = Ignored e.Message
+                  Time = w.Elapsed }
+            | _ ->
+                printers.Exception name e w.Elapsed
+                { Name = name
+                  Result = TestResult.Error e
+                  Time = w.Elapsed }
         fun (printers: TestPrinters) map ->
             let execOne (name: string, test) = 
                 printers.BeforeRun name
@@ -270,30 +292,14 @@ module Impl =
                     { Name = name
                       Result = Passed
                       Time = w.Elapsed }
-                with e ->
-                    w.Stop()
-                    match e with
-                    | ExceptionInList failExceptionTypes.Value ->
-                        let msg =
-                            let firstLine = 
-                                (stackTraceToString e.StackTrace).Split('\n') 
-                                |> Seq.filter (fun q -> q.Contains ",1): ") 
-                                |> Enumerable.FirstOrDefault
-                            sprintf "\n%s\n%s\n" e.Message firstLine
-                        printers.Failed name msg w.Elapsed
-                        { Name = name
-                          Result = Failed msg
-                          Time = w.Elapsed }
-                    | ExceptionInList ignoreExceptionTypes.Value ->
-                        printers.Ignored name e.Message
-                        { Name = name
-                          Result = Ignored e.Message
-                          Time = w.Elapsed }
-                    | _ ->
-                        printers.Exception name e w.Elapsed
-                        { Name = name
-                          Result = TestResult.Error e
-                          Time = w.Elapsed }
+                with
+                    | :? AggregateException as e->
+                        w.Stop()
+                        let exn = e.Flatten().InnerExceptions |> Seq.head
+                        handleException printers name w exn
+                    | e ->
+                        w.Stop()
+                        handleException printers name w e
             map execOne
 
     /// Runs a tree of tests, with parameterized printers (progress indicators) and traversal.
