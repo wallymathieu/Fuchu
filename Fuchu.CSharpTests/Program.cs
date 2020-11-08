@@ -64,6 +64,7 @@ namespace FuchuCSharpTests {
 
         private static int Main(string[] args) {
             return Tests.List()
+                /* TODO:
                 .ReplaceTestCode((name, test) => {
                     Console.WriteLine("Testing " + name); // print name of test before running
                     return Test.Case(name, () => {
@@ -75,6 +76,7 @@ namespace FuchuCSharpTests {
                     });
                 })
                 .Wrap(t => t.Timeout(2500)) // set a timeout for each test
+                */
                 .Run(); //.RunParallel(); or run all tests in parallel
         }
     }

@@ -1,5 +1,5 @@
 ﻿namespace Fuchu
-#if !FABLE_COMPILE
+#if !FABLE_COMPILER
 module XunitHelpers =
     open Fuchu
     open Fuchu.Helpers

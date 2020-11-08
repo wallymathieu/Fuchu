@@ -29,6 +29,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		README.md = README.md
 	EndProjectSection
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Fuchu.FableTests", "Fuchu.FableTests\Fuchu.FableTests.fsproj", "{8C780907-91F9-4027-AAB1-826104A17A1D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -72,11 +74,16 @@ Global
 		{A01A13AA-9F3C-4D76-BF2B-C8DC276854B5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A01A13AA-9F3C-4D76-BF2B-C8DC276854B5}.Release|Any CPU.Build.0 = Release|Any CPU
 		{A01A13AA-9F3C-4D76-BF2B-C8DC276854B5}.Fable|Any CPU.ActiveCfg = Fable|Any CPU
-		{A01A13AA-9F3C-4D76-BF2B-C8DC276854B5}.Fable|Any CPU.Build.0 = Fable|Any CPU
 		{F245D5AA-37BE-4605-81CB-7E6E1FC6F572}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{F245D5AA-37BE-4605-81CB-7E6E1FC6F572}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F245D5AA-37BE-4605-81CB-7E6E1FC6F572}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F245D5AA-37BE-4605-81CB-7E6E1FC6F572}.Release|Any CPU.Build.0 = Release|Any CPU
 		{F245D5AA-37BE-4605-81CB-7E6E1FC6F572}.Fable|Any CPU.ActiveCfg = Fable|Any CPU
+		{8C780907-91F9-4027-AAB1-826104A17A1D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8C780907-91F9-4027-AAB1-826104A17A1D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8C780907-91F9-4027-AAB1-826104A17A1D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8C780907-91F9-4027-AAB1-826104A17A1D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8C780907-91F9-4027-AAB1-826104A17A1D}.Fable|Any CPU.ActiveCfg = Fable|Any CPU
+		{8C780907-91F9-4027-AAB1-826104A17A1D}.Fable|Any CPU.Build.0 = Fable|Any CPU
 	EndGlobalSection
 EndGlobal

@@ -1,8 +1,8 @@
 {
   "private": true,
   "scripts": {
-    "pretest": "dotnet fable --outDir bin/Fable",
-    "test": "mocha bin/Fable/ -r esm -t 10000"
+    "pretest": "dotnet fable Fuchu.FableTests --outDir bin",
+    "test": "mocha bin -r esm -t 10000"
   },
   "dependencies": {
     "esm": "^3.2.25",

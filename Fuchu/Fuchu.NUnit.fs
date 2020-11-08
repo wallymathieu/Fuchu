@@ -1,5 +1,5 @@
 ﻿namespace Fuchu
-#if !FABLE_COMPILE
+#if !FABLE_COMPILER
 module NUnit =
     open Fuchu
     open System

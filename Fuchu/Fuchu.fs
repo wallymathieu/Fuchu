@@ -4,16 +4,18 @@ open System
 #if !FABLE_COMPILER
 open System.Linq
 open System.Threading.Tasks
+open System.Reflection
 #endif
 open System.Runtime.CompilerServices
-open System.Reflection
 
 /// Actual test function
 type TestCode = unit -> unit
+type TestCodeAsync = unit -> Async<unit>
 
 /// Test tree
 type Test = 
     | TestCase of TestCode
+    | TestCaseAsync of TestCodeAsync
     | TestList of Test seq
     | TestLabel of string * Test
 
@@ -21,9 +23,11 @@ type FuchuException(msg) = inherit Exception(msg)
 type AssertException(msg) = inherit FuchuException(msg)
 type IgnoreException(msg) = inherit FuchuException(msg)
 
+#if !FABLE_COMPILER
 /// Marks a top-level test for scanning
 [<AttributeUsage(AttributeTargets.Method ||| AttributeTargets.Property ||| AttributeTargets.Field)>]
 type TestsAttribute() = inherit Attribute()
+#endif
 
 module Helpers =
     let inline ignore2 _ = ignore
@@ -39,7 +43,9 @@ module Helpers =
     /// Print to Console and Trace
     let tprintf fmt = 
         Printf.kprintf (fun s -> 
+        #if !FABLE_COMPILER
                             System.Diagnostics.Trace.Write s
+        #endif
                             Console.Write s) fmt
 
     open System.Text.RegularExpressions
@@ -49,7 +55,7 @@ module Helpers =
 
     module Seq =
         let cons x xs = seq { yield x; yield! xs }
-
+    #if !FABLE_COMPILER
     type Type with
         static member TryGetType t = 
             try
@@ -72,7 +78,14 @@ module Helpers =
             m.GetCustomAttributes true
             |> Seq.filter (fun a -> a.GetType().FullName = attr)
             |> Seq.cast
-            
+    #endif
+    module Async=
+        /// From: https://github.com/fsprojects/FSharpPlus
+        let sequence (t: list<Async<_>>) : Async<list<_>> =
+                let rec loop acc = function
+                | []    -> async.Return (List.rev acc)
+                | x::xs -> async.Bind (x, fun x -> loop (x::acc) xs)
+                loop [] t
         
 [<CompilationRepresentationAttribute(CompilationRepresentationFlags.ModuleSuffix)>]
 module Test =
@@ -88,38 +101,41 @@ module Test =
                         then name
                         else parentName + "/" + name
                 loop fullName testList test
-            | TestCase test -> Seq.cons (parentName, test) testList
+            | TestCase test -> Seq.cons (parentName, Choice<_,_>.Choice1Of2 test) testList
+            | TestCaseAsync test -> Seq.cons (parentName, Choice<_,_>.Choice2Of2 test) testList
             | TestList tests -> Seq.collect (loop parentName testList) tests
         loop null Seq.empty
 
     /// Recursively maps all TestCodes in a Test
-    let rec wrap f =
+    let rec wrap f fAsync =
         function
         | TestCase test -> TestCase (f test)
-        | TestList testList -> TestList (Seq.map (wrap f) testList)
-        | TestLabel (label, test) -> TestLabel (label, wrap f test)
-
+        | TestCaseAsync test -> TestCaseAsync (fAsync test)
+        | TestList testList -> TestList (Seq.map (wrap f fAsync) testList)
+        | TestLabel (label, test) -> TestLabel (label, (wrap f fAsync) test)
+        
     /// Recursively replaces TestCodes in a Test
-    let rec replaceTestCode f =
+    let rec replaceTestCode f fAsync =
         function
         | TestLabel (label, TestCase test) -> f label test
         | TestCase test -> f null test
-        | TestList testList -> TestList (Seq.map (replaceTestCode f) testList)
-        | TestLabel (label, test) -> TestLabel (label, replaceTestCode f test)
+        | TestCaseAsync test -> fAsync null test
+        | TestList testList -> TestList (Seq.map (replaceTestCode f fAsync) testList)
+        | TestLabel (label, test) -> TestLabel (label, replaceTestCode f fAsync test)
 
     /// Filter tests by name
     let filter pred =
-        toTestCodeList 
+        toTestCodeList
         >> Seq.filter (fst >> pred)
-        >> Seq.map (fun (name, test) -> TestLabel (name, TestCase test))
+        >> Seq.map (fun (name, test) -> TestLabel (name, match test with Choice1Of2 t-> TestCase t | Choice2Of2 t-> TestCaseAsync t))
         >> TestList
 
     /// Applies a timeout to a test
-    let timeout (timeout:int) (test: TestCode) : TestCode =
+    let timeout (timeout:int) (test: TestCodeAsync) : TestCodeAsync =
         let testFunc = Func<_,_> test
         #if !FABLE_COMPILER
 
-        fun () -> 
+        fun () -> async{
             try
                 let asyncTestFunc = Task.Run(fun () -> testFunc.Invoke())
                 if asyncTestFunc.Wait(timeout) |> not then
@@ -127,17 +143,11 @@ module Test =
                     raise <| AssertException(sprintf "Timeout (%A)" ts)
             with :? TimeoutException ->
                 let ts = TimeSpan.FromMilliseconds (float timeout)
-                raise <| AssertException(sprintf "Timeout2 (%A)" ts)
+                raise <| AssertException(sprintf "Timeout2 (%A)" ts) }
         #else
-        fun () ->
-            try
-                async {
-                    let! child = Async.StartChild( async {  testFunc.Invoke() }, timeout )
-                    return! child
-                } |> Async.RunSynchronously
-            with :? TimeoutException ->
-                let ts = TimeSpan.FromMilliseconds (float timeout)
-                raise <| AssertException(sprintf "Timeout (%A)" ts)
+        fun () -> async {
+                let! child = Async.StartChild( async {  testFunc.Invoke() }, timeout )
+                return! child }
         #endif
 
 module Impl =
@@ -183,19 +193,30 @@ module Impl =
         Ignored: int
         Failed: int
         Errored: int
+        #if !FABLE_COMPILER
         Time: TimeSpan
+        #endif
     } with 
         override x.ToString() =
-                        sprintf "%d tests run: %d passed, %d ignored, %d failed, %d errored (%A)\n"
-                            (x.Errored + x.Failed + x.Passed)
-                            x.Passed x.Ignored x.Failed x.Errored x.Time
+            #if !FABLE_COMPILER
+            sprintf "%d tests run: %d passed, %d ignored, %d failed, %d errored (%A)\n"
+                (x.Errored + x.Failed + x.Passed)
+                x.Passed x.Ignored x.Failed x.Errored x.Time
+            #else
+            sprintf "%d tests run: %d passed, %d ignored, %d failed, %d errored\n"
+                (x.Errored + x.Failed + x.Passed)
+                x.Passed x.Ignored x.Failed x.Errored
+            #endif
         member x.Description = x.ToString()
         static member (+) (c1: TestResultCounts, c2: TestResultCounts) = 
             { Passed = c1.Passed + c2.Passed
               Ignored = c1.Ignored + c2.Ignored
               Failed = c1.Failed + c2.Failed
               Errored = c1.Errored + c2.Errored
-              Time = c1.Time + c2.Time }
+              #if !FABLE_COMPILER
+              Time = c1.Time + c2.Time
+              #endif
+            }
         static member errorCode (c: TestResultCounts) =
             (if c.Failed > 0 then 1 else 0) ||| (if c.Errored > 0 then 2 else 0)
 
@@ -203,10 +224,16 @@ module Impl =
     type TestRunResult = {
         Name: string
         Result: TestResult
+        #if !FABLE_COMPILER
         Time: TimeSpan
+        #endif
     } with 
         override x.ToString() = 
+            #if !FABLE_COMPILER
             sprintf "%s: %s (%A)" x.Name (x.Result.ToString()) x.Time
+            #else
+            sprintf "%s: %s" x.Name (x.Result.ToString())
+            #endif
         member x.Description = x.ToString()
         static member isPassed (r: TestRunResult) = TestResult.isPassed r.Result
         static member isIgnored (r: TestRunResult) = TestResult.isIgnored r.Result
@@ -229,27 +256,46 @@ module Impl =
           Ignored = get (TestResult.Ignored "")
           Failed = get (TestResult.Failed "")
           Errored = get (TestResult.Error null)
-          Time = results |> Seq.map (fun r -> r.Time) |> Seq.fold (+) TimeSpan.Zero }
+          #if !FABLE_COMPILER
+          Time = results |> Seq.map (fun r -> r.Time) |> Seq.fold (+) TimeSpan.Zero
+          #endif
+        }
 
     /// Hooks to print report through test run
     type TestPrinters = {
         BeforeRun: string -> unit
+        #if !FABLE_COMPILER
         Passed: string -> TimeSpan -> unit
+        #else
+        Passed: string -> unit
+        #endif
         Ignored: string -> string -> unit
+        #if !FABLE_COMPILER
         Failed: string -> string -> TimeSpan -> unit
         Exception: string -> exn -> TimeSpan -> unit
+        #else
+        Failed: string -> string -> unit
+        Exception: string -> exn -> unit
+        #endif
     } with
         static member Default = {
             BeforeRun = ignore
-            Passed = ignore2
             Ignored = ignore2
+            #if !FABLE_COMPILER
+            Passed = ignore2
             Failed = ignore3
             Exception = ignore3
-        }
+            #else
+            Passed = ignore
+            Failed = ignore2
+            Exception = ignore2
+            #endif
+            }
 
     /// Runs a list of tests, with parameterized printers (progress indicators) and traversal.
     /// Returns list of results.
     let evalTestList =
+        #if !FABLE_COMPILER
         let failExceptions = [
             typeof<AssertException>.AssemblyQualifiedName
             "NUnit.Framework.AssertionException, NUnit.Framework"
@@ -265,54 +311,50 @@ module Impl =
         ]
         let failExceptionTypes = lazy List.choose Type.TryGetType failExceptions
         let ignoreExceptionTypes = lazy List.choose Type.TryGetType ignoreExceptions
-
         let (|ExceptionInList|_|) (l: Type list) (e: #exn) = 
             let et = e.GetType()
             if l |> List.exists (fun x -> x.IsAssignableFrom et)
                 then Some()
                 else None
-        let handleException (printers: TestPrinters) (name: string) (w:System.Diagnostics.Stopwatch) e=
-            match e with
-            | ExceptionInList failExceptionTypes.Value ->
-                let msg =
-                    let firstLine = 
-                        (stackTraceToString e.StackTrace).Split('\n') 
-                        |> Seq.filter (fun q -> q.Contains ",1): ") 
-                        |> Enumerable.FirstOrDefault
-                    sprintf "\n%s\n%s\n" e.Message firstLine
-                printers.Failed name msg w.Elapsed
-                { Name = name
-                  Result = Failed msg
-                  Time = w.Elapsed }
-            | ExceptionInList ignoreExceptionTypes.Value ->
-                printers.Ignored name e.Message
-                { Name = name
-                  Result = Ignored e.Message
-                  Time = w.Elapsed }
-            | _ ->
-                printers.Exception name e w.Elapsed
-                { Name = name
-                  Result = TestResult.Error e
-                  Time = w.Elapsed }
+        #endif
+
         fun (printers: TestPrinters) map ->
-            let execOne (name: string, test) = 
+            #if !FABLE_COMPILER
+            let execOne (name: string, test:Choice<TestCode,TestCodeAsync>) = async{
                 printers.BeforeRun name
                 let w = System.Diagnostics.Stopwatch.StartNew()
                 try
-                    test()
+                    match test with
+                    | Choice1Of2 test->test()
+                    | Choice2Of2 test->do! test()
                     w.Stop()
                     printers.Passed name w.Elapsed
-                    { Name = name
-                      Result = Passed
-                      Time = w.Elapsed }
+                    return { Name = name; Result = Passed; Time = w.Elapsed }
                 with
                     | :? AggregateException as e->
                         w.Stop()
                         let exn = e.Flatten().InnerExceptions |> Seq.head
-                        handleException printers name w exn
+                        return handleException printers name w exn
                     | e ->
                         w.Stop()
-                        handleException printers name w e
+                        return handleException printers name w e
+            }
+            #else
+            let execOne (name: string, test:Choice<TestCode,TestCodeAsync>) = async{ 
+                printers.BeforeRun name
+                try
+                    match test with
+                    | Choice1Of2 test->test()
+                    | Choice2Of2 test->do! test()
+                    printers.Passed name
+                    return { Name = name; Result = Passed }
+                with e ->
+                    match e with
+                    | _ ->
+                        printers.Exception name e
+                        return { Name = name; Result = TestResult.Error e }
+            }
+            #endif
             map execOne
 
     /// Runs a tree of tests, with parameterized printers (progress indicators) and traversal.
@@ -322,9 +364,13 @@ module Impl =
         |> evalTestList printer map
         |> Seq.toList
 
+    #if !FABLE_COMPILER
     let printFailed = tprintf "%s: Failed: %s (%A)\n"
     let printException name ex = tprintf "%s: Exception: %s (%A)\n" name (exnToString ex)
-
+    #else
+    let printFailed = tprintf "%s: Failed: %s\n"
+    let printException name ex = tprintf "%s: Exception: %s\n" name (exnToString ex)
+    #endif
     /// Evaluates tests sequentially
     let evalSeq = 
         let printer = 
@@ -332,9 +378,8 @@ module Impl =
                 Failed = printFailed
                 Exception = printException }
 
-        eval printer Seq.map
+        fun t-> Async.sequence (eval printer Seq.map t |> List.ofSeq)
 #if !FABLE_COMPILER
-    let pmap (f: _ -> _) (s: _ seq) = s.AsParallel().Select(f) :> _ seq
     /// Evaluates tests in parallel
     let evalPar =
         let funLock =
@@ -347,18 +392,26 @@ module Impl =
             { TestPrinters.Default with 
                 Failed = printFailed
                 Exception = printException }
-        eval printer pmap
+        fun t-> Async.Parallel (eval printer Seq.map t) 
 #endif
 
     /// Runs tests, returns error code
-    let runEval eval (tests: Test) = 
+    let runEval eval (tests: Test) = async{
+        #if !FABLE_COMPILER
         let w = System.Diagnostics.Stopwatch.StartNew()
-        let results = eval tests
+        let! results = eval tests
         w.Stop()
         let summary = { sumTestResults results with Time = w.Elapsed }
         tprintf "%s" (summary.ToString())
-        TestResultCounts.errorCode summary
-
+        return TestResultCounts.errorCode summary
+        #else
+        let! results = eval tests
+        let summary = sumTestResults results
+        tprintf "%s" (summary.ToString())
+        return TestResultCounts.errorCode summary
+        #endif
+        }
+#if !FABLE_COMPILER
     let testFromMember (m: MemberInfo): Test option =
         [m]
         |> List.filter (fun m -> m.HasAttributeType typeof<TestsAttribute>)
@@ -409,6 +462,7 @@ module Impl =
 
     /// Scan tests marked with TestsAttribute from entry assembly
     let testFromThisAssembly () = testFromAssembly (Assembly.GetEntryAssembly())
+#endif
 
 [<AutoOpen; Extension>]
 module Tests =
@@ -430,6 +484,9 @@ module Tests =
 
     /// Builds a test case
     let inline testCase name test = TestLabel(name, TestCase test)
+
+    /// Builds an async test case
+    let inline testCaseAsync name test = TestLabel(name, TestCaseAsync test)
 
     /// Applies a function to a list of values to build test cases
     let inline testFixture setup = 
@@ -478,7 +535,7 @@ module Tests =
 
     /// Runs tests
     [<Extension; CompiledName("Run")>]
-    let run tests = runEval evalSeq tests
+    let run tests = runEval evalSeq tests |> Async.RunSynchronously
 
     #if !FABLE_COMPILER
     /// Runs tests in parallel
@@ -510,6 +567,7 @@ module Tests =
     [<CompiledNameAttribute("DefaultMain")>]
     let defaultMain tests = parseArgs >> defaultMainWithOptions tests
 
+    #if !FABLE_COMPILER
     /// Runs tests in this assembly with supplied command-line options. Returns 0 if all tests passed, otherwise 1
     [<CompiledNameAttribute("DefaultMainThisAssembly")>]
     let defaultMainThisAssembly args =
@@ -529,16 +587,17 @@ module Tests =
             | Some t -> filter t
             | None -> TestList []
         defaultMain tests args
-
+    #endif
 // Functions for C#/VB.NET :
-
+#if !FABLE_COMPILER
 [<Extension>]
 type TestExtensions =
     /// Pattern matching over a Test
     [<Extension>]
-    static member Match(test, testCase: Func<_,_>, testList: Func<_,_>, testLabel: Func<_,_,_>) =
+    static member Match(test, testCase: Func<_,_>, testList: Func<_,_>, testLabel: Func<_,_,_>, testCaseAsync: Func<_,_>) =
         match test with
         | TestCase c -> testCase.Invoke (Action c)
+        | TestCaseAsync c -> failwith "Not implemented!" //TODO
         | TestList l -> testList.Invoke l
         | TestLabel (label, t) -> testLabel.Invoke(label,t)
 
@@ -556,6 +615,7 @@ type TestExtensions =
     [<Extension>]
     static member Run tests = TestList tests |> run
 
+    (* TODO: Port
     /// Maps all TestCodes in a Test
     [<Extension>]
     static member Wrap (test, f: Func<Action,Action>) = 
@@ -565,12 +625,12 @@ type TestExtensions =
     [<Extension>]
     static member ReplaceTestCode(test, f: Func<string, Action, Test>) =
         test |> Test.replaceTestCode (fun n t -> f.Invoke(n, Action t))
-
+    *)
+    (* TODO: Port
     /// Applies a timeout to a test
     [<Extension>]
     static member Timeout(test: Action, timeout) = 
-        Action(Test.timeout timeout test.Invoke)
-
+        Action(Test.timeout timeout test.Invoke)  *)
     /// Filter tests by name
     [<Extension>]
     static member Where(test, pred: Func<_,_>) = 
@@ -620,7 +680,7 @@ type Test with
     /// Fail this test
     static member Fail(reason: string, [<ParamArray>] args: obj[]) =
         failtest (String.Format(reason, args)) |> ignore
-
+#endif
 
 type Assert =
 
@@ -642,6 +702,7 @@ type Assert =
         | null -> failtestf "%s\nShould not have been null" msg
         | _ -> ()
 
+    #if !FABLE_COMPILER
     static member Raise(msg, ex: Type, f) =
         try
             f()
@@ -649,8 +710,9 @@ type Assert =
         with e ->
             if e.GetType() <> ex
                 then failtestf "%s\nExpected exception '%s' but raised:\n%A" msg ex.FullName e
+    #endif
 
-    static member StringContains(msg, expectedSubString, actual: string) =
+    static member StringContains(msg, expectedSubString:string, actual: string) =
         if not (actual.Contains expectedSubString)
             then failtestf "%s\nExpected string containing: %s\nActual: %s" msg expectedSubString actual
         
