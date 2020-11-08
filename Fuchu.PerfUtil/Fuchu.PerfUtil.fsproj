@@ -12,6 +12,8 @@
     <Description>Integrates Fuchu with PerfUtil</Description>
     <Version Condition=" '$(VersionSuffix)' != '' ">$(VersionPrefix)-$(VersionSuffix)</Version>
     <Version Condition=" '$(VersionSuffix)' == '' ">$(VersionPrefix)</Version>
+    <Configurations>Debug;Release;Fable</Configurations>
+    <Platforms>AnyCPU</Platforms>
 
   </PropertyGroup>
   <ItemGroup>

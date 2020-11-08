@@ -6,6 +6,8 @@
     <RootNamespace>Fuchu.CSharpTests</RootNamespace>
     <AssemblyName>Fuchu.CSharpTests</AssemblyName>
     <TargetFrameworks>net452;netcoreapp2.1</TargetFrameworks>
+    <Configurations>Debug;Release;Fable</Configurations>
+    <Platforms>AnyCPU</Platforms>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Fuchu.FsCheck\Fuchu.FsCheck.fsproj" />

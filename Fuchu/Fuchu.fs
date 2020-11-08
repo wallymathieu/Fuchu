@@ -1,10 +1,12 @@
 ﻿namespace Fuchu
 
 open System
+#if !FABLE_COMPILER
 open System.Linq
+open System.Threading.Tasks
+#endif
 open System.Runtime.CompilerServices
 open System.Reflection
-open System.Threading.Tasks
 
 /// Actual test function
 type TestCode = unit -> unit
@@ -115,7 +117,8 @@ module Test =
     /// Applies a timeout to a test
     let timeout (timeout:int) (test: TestCode) : TestCode =
         let testFunc = Func<_,_> test
-        
+        #if !FABLE_COMPILER
+
         fun () -> 
             try
                 let asyncTestFunc = Task.Run(fun () -> testFunc.Invoke())
@@ -125,7 +128,17 @@ module Test =
             with :? TimeoutException ->
                 let ts = TimeSpan.FromMilliseconds (float timeout)
                 raise <| AssertException(sprintf "Timeout2 (%A)" ts)
-
+        #else
+        fun () ->
+            try
+                async {
+                    let! child = Async.StartChild( async {  testFunc.Invoke() }, timeout )
+                    return! child
+                } |> Async.RunSynchronously
+            with :? TimeoutException ->
+                let ts = TimeSpan.FromMilliseconds (float timeout)
+                raise <| AssertException(sprintf "Timeout (%A)" ts)
+        #endif
 
 module Impl =
     open Helpers
@@ -320,9 +333,8 @@ module Impl =
                 Exception = printException }
 
         eval printer Seq.map
-
+#if !FABLE_COMPILER
     let pmap (f: _ -> _) (s: _ seq) = s.AsParallel().Select(f) :> _ seq
-
     /// Evaluates tests in parallel
     let evalPar =
         let funLock =
@@ -336,6 +348,7 @@ module Impl =
                 Failed = printFailed
                 Exception = printException }
         eval printer pmap
+#endif
 
     /// Runs tests, returns error code
     let runEval eval (tests: Test) = 
@@ -466,10 +479,12 @@ module Tests =
     /// Runs tests
     [<Extension; CompiledName("Run")>]
     let run tests = runEval evalSeq tests
-    
+
+    #if !FABLE_COMPILER
     /// Runs tests in parallel
     [<Extension; CompiledName("RunParallel")>]
     let runParallel tests = runEval evalPar tests
+    #endif
 
     // Runner options
     type RunOptions = { Parallel: bool }
@@ -486,7 +501,9 @@ module Tests =
     /// Runs tests with supplied options. Returns 0 if all tests passed, otherwise 1
     [<CompiledNameAttribute("DefaultMainWithOptions")>]
     let defaultMainWithOptions tests (options: RunOptions) = 
+        #if !FABLE_COMPILER
         let run = if options.Parallel then runParallel else run
+        #endif
         run tests
     
     /// Runs tests with supplied command-line options. Returns 0 if all tests passed, otherwise 1
